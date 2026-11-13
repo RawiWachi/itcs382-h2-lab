@@ -21,20 +21,32 @@ OS name: "windows 11", version: "10.0", arch: "amd64", family: "windows"|
 
 Commit of the starter, before any change:
 
-0.3 Your prediction for `staff`, written before the second run:
+0.3 Your prediction for `staff`, written before the second run: No. of Free locker is 3
 
-Output of the second run, for `staff` and `quit`:
+Output of the second run, for `staff` and `quit`: 
 
 ```text
-
+java -jar target/parcelpoint-h2-1.0.jar
+ParcelPoint commands:
+  store <code> <studentId> <SMALL|MEDIUM|LARGE>
+  pickup <code> <days>
+  find <code>
+  staff
+  quit
+>staff
+Free lockers: 3
+>quit
 ```
 
 State in one sentence where you think the parcels of the first run were kept.
+>Keeping Data in the memmory as link hash map.
 
 0.5 The line of Main that you would change to keep the parcels somewhere else:
 
 ```java
+        ParcelRepository repository = new InMemoryParcelRepository(); // Old
 
+        ParcelRepository repository = new H2ParcelRepository("./data/parcelpoint"); //new
 ```
 
 0.6 Commit of the switch to H2:
