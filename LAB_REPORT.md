@@ -54,17 +54,38 @@ State in one sentence where you think the parcels of the first run were kept.
 0.7 Output of `SELECT * FROM PARCEL;` after you stored two parcels:
 
 ```text
-
+sql> SELECT * FROM PARCEL;
+CODE | STUDENT_ID | PARCEL_SIZE | STATUS | LOCKER_NUMBER
+1000 | 6788224    | SMALL       | STORED | 1
+1001 | 6788224    | LARGE       | STORED | 3
 ```
 
 0.8 Explain why ParcelPoint could not start while the H2 Shell was open, and identify the class that wrote the message `Cannot create the PARCEL table`.
+>Because there have the database connection, so they can't open in the same time.
+>Class H2ParcelReposity throw error on the console.
 
 0.9 Explain why `staff` shows no parcel while `find` shows each one, and why all three lockers look free.
+>There is no code in findall which staff use it so they show nothing.
 
 0.11 Your findAll method:
 
 ```java
-
+ @Override
+    public List<Parcel> findAll() {
+        String sql = "SELECT * FROM PARCEL ORDER BY CODE";
+        try (Connection connection = connect();
+            PreparedStatement statement = connection.prepareStatement(sql)) {
+            try (ResultSet row = statement.executeQuery()) {
+                List<Parcel> parcels = new ArrayList<>();
+                while (row.next()){
+                    parcels.add(toParcel(row));
+                }
+                return parcels;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Cannot read all parcel ", e);
+        }
+    }
 ```
 
 Commit that adds findAll:
