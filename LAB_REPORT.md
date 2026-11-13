@@ -1,21 +1,16 @@
 # Lab Report, Designing the Data Management Layer with H2
 
-Repository URL:
+Repository URL: https://github.com/RawiWachi/itcs382-h2-lab
 
 ## Tools
 
 | Item | Version or name |
 | --- | --- |
-| JDK |openjdk version "25.0.4.1" 2026-08-18 LTS
-OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)
-OpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode, sharing) |
-| Maven | Apache Maven 3.10.0 (c43a36b8d67be7e0805a411bc0898af1a51f5472)
-Maven home: C:\Tools\apache-maven-3.10.0-bin\apache-maven-3.10.0
-Java version: 25.0.4.1, vendor: Eclipse Adoptium, runtime: C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot
-Default locale: en_US, platform encoding: UTF-8, time zone: Asia/Bangkok
-OS name: "windows 11", version: "10.0", arch: "amd64", family: "windows"|
+| JDK |openjdk version "25.0.4.1" 2026-08-18 LTS OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS) OpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode, sharing) |
+| Maven | Apache Maven 3.10.0 (c43a36b8d67be7e0805a411bc0898af1a51f5472) Maven home: C:\Tools\apache-maven-3.10.0-bin\apache-maven-3.10.0 Java version: 25.0.4.1, vendor: Eclipse Adoptium, runtime: C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspotDefault locale: en_US, platform encoding: UTF-8, time zone: Asia/Bangkok
+OS name:| "windows 11", version: "10.0", arch: "amd64", family: "windows"|
 | IDE |VS code |
-| AI tool and exact model, if you used one | |
+| AI tool and exact model, if you used one | Gemini |
 
 ## Part 0. From a store in memory to H2
 
@@ -93,10 +88,19 @@ Commit that adds findAll:
 0.12 Output of `SELECT * FROM PARCEL;` after the pickup:
 
 ```text
+sql> SELECT * FROM PARCEL;
+CODE | STUDENT_ID | PARCEL_SIZE | STATUS    | LOCKER_NUMBER
+1000 | 6788224    | SMALL       | PICKED_UP | null
+1001 | 6788224    | LARGE       | PICKED_UP | null
+(2 rows, 11 ms)
 
 ```
 
 0.13 Optional. Describe what `find P9999'OR'1'='1` showed while the SQL was joined from strings, and what it showed after you put the placeholder back.
+> find P9999'OR'1'='1
+No parcel with code P9999'OR'1'='1
+>This mean that it cannot find the code.
+
 
 ## Part A. Model the design
 
@@ -109,19 +113,43 @@ flowchart TB
     service
     domain
     storage
+    cli --> domain
     cli --> service
+    service--> storage
+    service--> domain
+    storage--> domain
+    parcelpoint --> service
+    parcelpoint --> cli
+    parcelpoint --> storage
 ```
 
 State whether cli depends on storage, and explain why.
+>Yes because cli depend on storage in the idirect way.
 
 A2 Complete the class diagram of the data management layer with ParcelService, the interface ParcelRepository with its three operations, and the two classes that implement it.
 
 ```mermaid
 classDiagram
-    class ParcelService
+    class ParcelService {
+        -ParcelRepository repository
+        +store(parcel: Parcel) Optional~Locker~
+        +pickUp(code: String, days: int) Optional~Double~
+        +find(code: String) Optional~Parcel~
+        +allParcels() List~Parcel~
+        +countFreeLockers() long
+    }
     class ParcelRepository {
         <<interface>>
+        +save(parcel: Parcel) void
+        +findByCode(code: String) Optional~Parcel~
+        +findAll() List~Parcel~
     }
+    class H2ParcelRepository
+    class InMemoryParcelRepository
+
+    ParcelService --> ParcelRepository : uses
+    H2ParcelRepository ..|> ParcelRepository : implements
+    InMemoryParcelRepository ..|> ParcelRepository : implements
 ```
 
 A3 Draw a sequence diagram for the command `store P1003 S1003 MEDIUM`, from the staff member to the repository. Show each message as an operation of the class that receives it.
@@ -130,23 +158,37 @@ A3 Draw a sequence diagram for the command `store P1003 S1003 MEDIUM`, from the 
 sequenceDiagram
     actor Staff
     participant cli as :ParcelCommandLine
-    Staff->>cli: store P1003 S1003 MEDIUM
+    participant service as :ParcelService
+    participant repository as :ParcelRepository
+
+    Staff->>cli: store(P1003, S1003, MEDIUM)
+    cli->>service: store(new Parcel(P1003, S1003, MEDIUM))
+    service->>repository: save(parcel)
+    repository-->>service: return
+    service-->>cli: Optional.of(locker)
+    cli-->>Staff: Parcel P1003 is in locker 2
 ```
 
 Explain why the last lifeline is the interface ParcelRepository rather than H2ParcelRepository.
+> `ParcelService` declares its repository field and constructor parameter as `ParcelRepository`, so it sends the `save(parcel)` message to that abstraction. `Main` chooses and injects the concrete implementation. So, the sequence diagram uses `ParcelRepository` as the last lifeline, showing loose coupling and allowing the storage implementation to be replaced without changing `ParcelService`.
 
 ## Part B. Design questions
 
 1. Identify the files that you changed to move from the store in memory to H2, and explain why no other class had to change. Use the terms of this course.
+> Only `Main.java` was changed to create an `H2ParcelRepository`.
 
 2. The PARCEL table stores the size of a parcel as SMALL, MEDIUM or LARGE rather than as 1, 2 or 3. Identify the type of connascence between ParcelSize and the table in each case, and explain which one is weaker.
+> Storing `SMALL`, `MEDIUM`, and `LARGE` creates **connascence of name**, while storing `1`, `2`, and `3` creates **connascence of meaning**. Connascence of name is weaker because the values explain themselves and do not require a hidden numeric mapping.
 
 3. Project Phase 2 asks for a data store that needs no separate server. Explain why an embedded database such as H2 meets this rule, and describe the limit of an embedded database that Step 0.8 showed.
+> Embedded H2 runs inside the application and uses a local file, so it needs no separate server. 
+> Step 0.8 showed that the file is locked by the first process, so the application and H2 Shell cannot access it at the same time.
 
 4. State the data store that you would choose for your Project Phase 2 team, files or an embedded database, the requirement that drives the choice, and the package that will access it.
+> I would choose embedded H2 because it provides persistent structured storage without requiring a separate server.
 
 ## AI usage declaration
 
 | AI tool and exact model | Date | Purpose | Files or answers it produced or changed | How you checked its output |
-| --- | --- | --- | --- | --- |
+| Gemini free model | 13/11/2569 | Search information and rewrite the gramma | - | Read the new phase that rewrite and check information refference |
 | | | | | |
